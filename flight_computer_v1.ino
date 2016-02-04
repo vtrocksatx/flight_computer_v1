@@ -96,26 +96,27 @@ void dmpDataReady() {
     mpuInterrupt = true;
 }
 
-void setup() 
-{ 
-	openLoggerSetup();
-	accelerometerSetup();
-	barometricSetup();
-	gyroSetup();
+int globalDelay = 100;
+
+void setup() { 
+  Serial.begin(19200);
+  //gyroSetup();
+  openLoggerSetup();
+  accelerometerSetup();
+  barometricSetup();
 } 
 
-void loop() 
-{ 
-	openLoggerLoop();
-	accelerometerLoop();
-	barometricLoop();
-	gyroLoop();
+void loop() { 
+  //gyroLoop();
+  //openLoggerLoop();
+  accelerometerLoop();
+  barometricLoop();
 }
 
 void openLoggerSetup() {
   pinMode(ledPin, OUTPUT);     
 
-  Serial.begin(19200); //9600bps is default for OpenLog
+  //Serial.begin(19200); //9600bps is default for OpenLog
   //Serial.begin(57600); //Much faster serial, used for testing buffer overruns on OpenLog
   //Serial.begin(115200); //Much faster serial, used for testing buffer overruns on OpenLog
 
@@ -123,34 +124,18 @@ void openLoggerSetup() {
 
   Serial.println(); 
   Serial.println("Run OpenLog Test"); 
-
-  int testAmt = 10;
-  //At 9600, testAmt of 4 takes about 1 minute, 10 takes about 3 minutes
-  //At 57600, testAmt of 10 takes about 1 minute, 40 takes about 5 minutes
-  //At 115200, testAmt of 30 takes about 1 minute
-  //testAmt of 10 will push 111,000 characters/bytes. With header and footer strings, total is 111,052
-
-  Serial.println("Hey Ryan!!");
-  Serial.println("The baud rate works");
-
-  unsigned long totalCharacters = (long)testAmt * 100 * 110;
-  Serial.print("Characters pushed: ");
-  Serial.println(totalCharacters);  
-  Serial.print("Time taken (s): ");
-  Serial.println(millis()/1000);
-  Serial.println("Done!");
 }
 
 void openLoggerLoop() {
   //Blink the Status LED because we're done!
-  digitalWrite(ledPin, HIGH);
-  delay(100);
-  digitalWrite(ledPin, LOW);
-  delay(1000);
+  //digitalWrite(ledPin, HIGH);
+  //delay(100);
+  //digitalWrite(ledPin, LOW);
+  //delay(1000);
 }
 
 void accelerometerSetup() {
-  Serial.begin(19200);
+  //Serial.begin(19200);
 
   // Configure SPI
   SPI_SETUP();
@@ -168,11 +153,11 @@ void accelerometerLoop() {
   Serial.print(",");
   Serial.println(zAcc, 2);
 
-  delay(100);
+  delay(1);
 }
 
 void barometricSetup() {
-  Serial.begin(19200);
+  //Serial.begin(19200);
   Serial.println("REBOOT");
 
   // Initialize the sensor (it is important to get calibration values stored on the device).
@@ -185,7 +170,7 @@ void barometricSetup() {
     // see the comments at the top of this sketch for the proper connections.
 
     Serial.println("BMP180 init fail\n\n");
-    while(1); // Pause forever.
+    while(globalDelay); // Pause forever.
   }
 }
 
@@ -295,7 +280,7 @@ void barometricLoop() {
   }
   else Serial.println("error starting temperature measurement\n");
 
-  delay(5000);  // Pause for 5 seconds.
+  delay(globalDelay);  // Pause for 5 seconds.
 }
 
 void gyroSetup() {
@@ -310,7 +295,7 @@ void gyroSetup() {
     // initialize serial communication
     // (115200 chosen because it is required for Teapot Demo output, but it's
     // really up to you depending on your project)
-    Serial.begin(9600);
+    //Serial.begin(9600);
     while (!Serial); // wait for Leonardo enumeration, others continue immediately
 
     // NOTE: 8MHz or slower host processors, like the Teensy @ 3.3v or Ardunio
