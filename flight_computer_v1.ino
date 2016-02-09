@@ -97,20 +97,30 @@ void dmpDataReady() {
 }
 
 int globalDelay = 100;
+long time0 = millis();
+long newTime = 0;
 
 void setup() { 
   Serial.begin(19200);
-  //gyroSetup();
+  gyroSetup();
   openLoggerSetup();
   accelerometerSetup();
   barometricSetup();
+  Serial.print("Time(sec)\tTemp(deg C)\tAbs Pres.(mb)\tYaw\tPitch\tRoll\tAccelX\tAccelY\tAccelZ");
+  Serial.println();
 } 
 
 void loop() { 
-  //gyroLoop();
+  newTime = millis() - time0;
+  Serial.print(newTime/1000);
+  Serial.print(".");
+  Serial.print(newTime%1000);
+  Serial.print("\t\t");
+  barometricLoop();
+  gyroLoop();
   //openLoggerLoop();
   accelerometerLoop();
-  barometricLoop();
+  Serial.println();
 }
 
 void openLoggerSetup() {
@@ -148,10 +158,11 @@ void accelerometerLoop() {
   readVal(); // get acc values and put into global variables
 
   Serial.print(xAcc, 2);
-  Serial.print(",");
+  Serial.print("\t");
   Serial.print(yAcc, 2);
-  Serial.print(",");
-  Serial.println(zAcc, 2);
+  Serial.print("\t");
+  Serial.print(zAcc, 2);
+  Serial.print("\t");
 
   delay(1);
 }
@@ -184,12 +195,12 @@ void barometricLoop() {
   // you will need to know the altitude at which your measurements are taken.
   // We're using a constant called ALTITUDE in this sketch:
   
-  Serial.println();
-  Serial.print("provided altitude: ");
-  Serial.print(ALTITUDE,0);
-  Serial.print(" meters, ");
-  Serial.print(ALTITUDE*3.28084,0);
-  Serial.println(" feet");
+  //Serial.println();
+  //Serial.print("provided altitude: ");
+  //Serial.print(ALTITUDE,0);
+  //Serial.print(" meters, ");
+  //Serial.print(ALTITUDE*3.28084,0);
+  //Serial.println(" feet");
   
   // If you want to measure altitude, and not pressure, you will instead need
   // to provide a known baseline pressure. This is shown at the end of the sketch.
@@ -214,11 +225,12 @@ void barometricLoop() {
     if (status != 0)
     {
       // Print out the measurement:
-      Serial.print("temperature: ");
+      //Serial.print("temperature: ");
       Serial.print(T,2);
-      Serial.print(" deg C, ");
-      Serial.print((9.0/5.0)*T+32.0,2);
-      Serial.println(" deg F");
+      Serial.print("\t\t");
+      //Serial.print(" deg C, ");
+      //Serial.print((9.0/5.0)*T+32.0,2);
+      //Serial.println(" deg F");
       
       // Start a pressure measurement:
       // The parameter is the oversampling setting, from 0 to 3 (highest res, longest wait).
@@ -241,11 +253,12 @@ void barometricLoop() {
         if (status != 0)
         {
           // Print out the measurement:
-          Serial.print("absolute pressure: ");
+          //Serial.print("absolute pressure: ");
           Serial.print(P,2);
-          Serial.print(" mb, ");
-          Serial.print(P*0.0295333727,2);
-          Serial.println(" inHg");
+          Serial.print("\t\t");
+          //Serial.print(" mb, ");
+          //Serial.print(P*0.0295333727,2);
+          //Serial.println(" inHg");
 
           // The pressure sensor returns abolute pressure, which varies with altitude.
           // To remove the effects of altitude, use the sealevel function and your current altitude.
@@ -253,24 +266,24 @@ void barometricLoop() {
           // Parameters: P = absolute pressure in mb, ALTITUDE = current altitude in m.
           // Result: p0 = sea-level compensated pressure in mb
 
-          p0 = pressure.sealevel(P,ALTITUDE); // we're at 1655 meters (Boulder, CO)
-          Serial.print("relative (sea-level) pressure: ");
-          Serial.print(p0,2);
-          Serial.print(" mb, ");
-          Serial.print(p0*0.0295333727,2);
-          Serial.println(" inHg");
+          //p0 = pressure.sealevel(P,ALTITUDE); // we're at 1655 meters (Boulder, CO)
+          //Serial.print("relative (sea-level) pressure: ");
+          //Serial.print(p0,2);
+          //Serial.print(" mb, ");
+          //Serial.print(p0*0.0295333727,2);
+          //Serial.println(" inHg");
 
           // On the other hand, if you want to determine your altitude from the pressure reading,
           // use the altitude function along with a baseline pressure (sea-level or other).
           // Parameters: P = absolute pressure in mb, p0 = baseline pressure in mb.
           // Result: a = altitude in m.
 
-          a = pressure.altitude(P,p0);
-          Serial.print("computed altitude: ");
-          Serial.print(a,0);
-          Serial.print(" meters, ");
-          Serial.print(a*3.28084,0);
-          Serial.println(" feet");
+          //a = pressure.altitude(P,p0);
+          //Serial.print("computed altitude: ");
+          //Serial.print(a,0);
+          //Serial.print(" meters, ");
+          //Serial.print(a*3.28084,0);
+          //Serial.println(" feet");
         }
         else Serial.println("error retrieving pressure measurement\n");
       }
@@ -313,20 +326,20 @@ void gyroSetup() {
     Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
 
     // wait for ready
-    Serial.println(F("\nSend any character to begin DMP programming and demo: "));
-    while (Serial.available() && Serial.read()); // empty buffer
-    while (!Serial.available());                 // wait for data
-    while (Serial.available() && Serial.read()); // empty buffer again
+    //Serial.println(F("\nSend any character to begin DMP programming and demo: "));
+    //while (Serial.available() && Serial.read()); // empty buffer
+    //while (!Serial.available());                 // wait for data
+    //while (Serial.available() && Serial.read()); // empty buffer again
 
     // load and configure the DMP
     Serial.println(F("Initializing DMP..."));
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
-    mpu.setXGyroOffset(220);
-    mpu.setYGyroOffset(76);
-    mpu.setZGyroOffset(-85);
-    mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
+    mpu.setXGyroOffset(0);
+    mpu.setYGyroOffset(100);
+    mpu.setZGyroOffset(-60);
+    mpu.setZAccelOffset(1688); // 1688 factory default for my test chip
 
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
@@ -432,12 +445,13 @@ void gyroLoop() {
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            Serial.print("ypr\t");
+            //Serial.print("ypr\t");
             Serial.print(ypr[0] * 180/M_PI);
             Serial.print("\t");
             Serial.print(ypr[1] * 180/M_PI);
             Serial.print("\t");
-            Serial.println(ypr[2] * 180/M_PI);
+            Serial.print(ypr[2] * 180/M_PI);
+            Serial.print("\t");
         #endif
 
         #ifdef OUTPUT_READABLE_REALACCEL
