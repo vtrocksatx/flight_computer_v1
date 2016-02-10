@@ -21,6 +21,7 @@
 double xAcc, yAcc, zAcc; // global acceleration values
 SFE_BMP180 pressure;
 int ledPin =  13; //Status LED connected to digital pin 13 - for openLogger
+int nasaTimerPin = 30;
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -97,11 +98,14 @@ void dmpDataReady() {
 }
 
 int globalDelay = 100;
-long time0 = millis();
+long time0;
 long newTime = 0;
+bool valRead = false;
+bool getTime = true;
 
 void setup() { 
   Serial.begin(19200);
+  pinMode(nasaTimerPin, INPUT);
   gyroSetup();
   openLoggerSetup();
   accelerometerSetup();
@@ -111,6 +115,13 @@ void setup() {
 } 
 
 void loop() { 
+  while (valRead != true) {
+    valRead = digitalRead(nasaTimerPin);
+  }
+  if (getTime == true) {
+    time0 = millis();
+    getTime = false;
+  }
   newTime = millis() - time0;
   Serial.print(newTime/1000);
   Serial.print(".");
@@ -118,7 +129,6 @@ void loop() {
   Serial.print("\t\t");
   barometricLoop();
   gyroLoop();
-  //openLoggerLoop();
   accelerometerLoop();
   Serial.println();
 }
