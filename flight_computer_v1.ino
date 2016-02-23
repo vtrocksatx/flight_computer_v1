@@ -10,10 +10,10 @@
     #include "Wire.h"
 #endif
 
-#define SS 53 // Serial Select -> CS on LIS331
+#define SS 53 // Serial1 Select -> CS on LIS331
 #define MOSI 51 // MasterOutSlaveIn -> SDI
 #define MISO 50 // MasterInSlaveOut -> SDO
-#define SCK 52 // Serial Clock -> SPC on LIS331
+#define SCK 52 // Serial1 Clock -> SPC on LIS331
 #define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
 // scale factor: +/-24g = 48G range. 2^16 bits. 48/65536 = 0.0007324
 #define ALTITUDE 634.0
@@ -102,17 +102,25 @@ long time0;
 long newTime = 0;
 bool valRead = false;
 bool getTime = true;
+char ettusArray[256];
+int ettusTransCount = 1;
+char buffer[256];
 
 void setup() { 
-  Serial.begin(19200);
+  Serial1.begin(19200);
+  Serial.begin(9600); // Ettus
   pinMode(nasaTimerPin, INPUT);
   gyroSetup();
   openLoggerSetup();
   accelerometerSetup();
   barometricSetup();
-  Serial.print("Time(sec)\tTemp(deg C)\tAbs Pres.(mb)\tYaw\tPitch\tRoll\tAccelX\tAccelY\tAccelZ");
-  Serial.println();
+  Serial1.print("Time(sec)\tTemp(deg C)\tAbs Pres.(mb)\tYaw\tPitch\tRoll\tAccelX\tAccelY\tAccelZ");
+  Serial1.println();
 } 
+
+void clearArray() {
+  memset(ettusArray, '\0', sizeof ettusArray);
+}
 
 void loop() { 
   while (valRead != true) {
@@ -122,28 +130,45 @@ void loop() {
     time0 = millis();
     getTime = false;
   }
+  clearArray();
+  strcat(ettusArray, "$,callsign,");
+  itoa(ettusTransCount, buffer, 10);
+  strcat(ettusArray, buffer);
+  memset(buffer, '\0', sizeof buffer);
+  strcat(ettusArray, ",");
   newTime = millis() - time0;
-  Serial.print(newTime/1000);
-  Serial.print(".");
-  Serial.print(newTime%1000);
-  Serial.print("\t\t");
+  Serial1.print(newTime/1000);
+  itoa(newTime/1000, buffer, 10);
+  strcat(ettusArray, buffer);
+  memset(buffer, '\0', sizeof buffer);
+  strcat(ettusArray, ".");
+  Serial1.print(".");
+  Serial1.print(newTime%1000);
+  itoa(newTime%1000, buffer, 10);
+  strcat(ettusArray, buffer);
+  memset(buffer, '\0', sizeof buffer);
+  strcat(ettusArray, ",");
+  Serial1.print("\t\t");
   barometricLoop();
   gyroLoop();
   accelerometerLoop();
+  Serial1.println();
+  Serial.print(ettusArray);
   Serial.println();
+  ettusTransCount++;
 }
 
 void openLoggerSetup() {
   pinMode(ledPin, OUTPUT);     
 
-  //Serial.begin(19200); //9600bps is default for OpenLog
-  //Serial.begin(57600); //Much faster serial, used for testing buffer overruns on OpenLog
-  //Serial.begin(115200); //Much faster serial, used for testing buffer overruns on OpenLog
+  //Serial1.begin(19200); //9600bps is default for OpenLog
+  //Serial1.begin(57600); //Much faster Serial1, used for testing buffer overruns on OpenLog
+  //Serial1.begin(115200); //Much faster Serial1, used for testing buffer overruns on OpenLog
 
   delay(1000); //Wait a second for OpenLog to init
 
-  Serial.println(); 
-  Serial.println("Run OpenLog Test"); 
+  Serial1.println(); 
+  Serial1.println("Run OpenLog Test"); 
 }
 
 void openLoggerLoop() {
@@ -155,7 +180,7 @@ void openLoggerLoop() {
 }
 
 void accelerometerSetup() {
-  //Serial.begin(19200);
+  //Serial1.begin(19200);
 
   // Configure SPI
   SPI_SETUP();
@@ -167,32 +192,75 @@ void accelerometerSetup() {
 void accelerometerLoop() {
   readVal(); // get acc values and put into global variables
 
-  Serial.print(xAcc, 2);
-  Serial.print("\t");
-  Serial.print(yAcc, 2);
-  Serial.print("\t");
-  Serial.print(zAcc, 2);
-  Serial.print("\t");
+  Serial1.print(xAcc, 2);
+  Serial1.print("\t");
+  Serial1.print(yAcc, 2);
+  Serial1.print("\t");
+  Serial1.print(zAcc, 2);
+  Serial1.print("\t");
+  convertToArray(xAcc);
+  convertToArray(yAcc);
+  if (zAcc < 0) {
+    strcat(ettusArray, "-");
+  } 
+    zAcc = abs(zAcc);
 
+    itoa(zAcc, buffer, 10);
+    strncat(ettusArray, buffer, countCharsLeft());
+    memset(buffer, '\0', sizeof buffer);
+    strncat(ettusArray, ".", countCharsLeft());
+    itoa(((int)(zAcc*10))%10, buffer, 10);
+    strncat(ettusArray, buffer, countCharsLeft());
+    memset(buffer, '\0', sizeof buffer);
+    itoa(((int)(zAcc*100))%10, buffer, 10);
+    strncat(ettusArray, buffer, countCharsLeft());
+    memset(buffer, '\0', sizeof buffer);
   delay(1);
 }
 
 void barometricSetup() {
-  //Serial.begin(19200);
-  Serial.println("REBOOT");
+  //Serial1.begin(19200);
+  Serial1.println("REBOOT");
 
   // Initialize the sensor (it is important to get calibration values stored on the device).
 
   if (pressure.begin())
-    Serial.println("BMP180 init success");
+    Serial1.println("BMP180 init success");
   else
   {
     // Oops, something went wrong, this is usually a connection problem,
     // see the comments at the top of this sketch for the proper connections.
 
-    Serial.println("BMP180 init fail\n\n");
+    Serial1.println("BMP180 init fail\n\n");
     while(globalDelay); // Pause forever.
   }
+}
+
+void convertToArray(double val) {
+  if (val < 0) {
+    strcat(ettusArray, "-");
+  } 
+    val = abs(val);
+
+    itoa(val, buffer, 10);
+    strncat(ettusArray, buffer, countCharsLeft());
+    memset(buffer, '\0', sizeof buffer);
+    strncat(ettusArray, ".", countCharsLeft());
+    itoa(((int)(val*10))%10, buffer, 10);
+    strncat(ettusArray, buffer, countCharsLeft());
+    memset(buffer, '\0', sizeof buffer);
+    itoa(((int)(val*100))%10, buffer, 10);
+    strncat(ettusArray, buffer, countCharsLeft());
+    memset(buffer, '\0', sizeof buffer);
+    strncat(ettusArray, ",", countCharsLeft());
+}
+
+int countCharsLeft() {
+  int i = 0;
+  while (ettusArray[i] != '\0') {
+    i++;
+  }
+  return (255 - i);
 }
 
 void barometricLoop() {
@@ -205,12 +273,12 @@ void barometricLoop() {
   // you will need to know the altitude at which your measurements are taken.
   // We're using a constant called ALTITUDE in this sketch:
   
-  //Serial.println();
-  //Serial.print("provided altitude: ");
-  //Serial.print(ALTITUDE,0);
-  //Serial.print(" meters, ");
-  //Serial.print(ALTITUDE*3.28084,0);
-  //Serial.println(" feet");
+  //Serial1.println();
+  //Serial1.print("provided altitude: ");
+  //Serial1.print(ALTITUDE,0);
+  //Serial1.print(" meters, ");
+  //Serial1.print(ALTITUDE*3.28084,0);
+  //Serial1.println(" feet");
   
   // If you want to measure altitude, and not pressure, you will instead need
   // to provide a known baseline pressure. This is shown at the end of the sketch.
@@ -235,12 +303,14 @@ void barometricLoop() {
     if (status != 0)
     {
       // Print out the measurement:
-      //Serial.print("temperature: ");
-      Serial.print(T,2);
-      Serial.print("\t\t");
-      //Serial.print(" deg C, ");
-      //Serial.print((9.0/5.0)*T+32.0,2);
-      //Serial.println(" deg F");
+      //Serial1.print("temperature: ");
+      Serial1.print(T,2);
+      Serial1.print("\t\t");
+
+      convertToArray(T);
+      //Serial1.print(" deg C, ");
+      //Serial1.print((9.0/5.0)*T+32.0,2);
+      //Serial1.println(" deg F");
       
       // Start a pressure measurement:
       // The parameter is the oversampling setting, from 0 to 3 (highest res, longest wait).
@@ -263,12 +333,13 @@ void barometricLoop() {
         if (status != 0)
         {
           // Print out the measurement:
-          //Serial.print("absolute pressure: ");
-          Serial.print(P,2);
-          Serial.print("\t\t");
-          //Serial.print(" mb, ");
-          //Serial.print(P*0.0295333727,2);
-          //Serial.println(" inHg");
+          //Serial1.print("absolute pressure: ");
+          Serial1.print(P,2);
+          Serial1.print("\t\t");
+          convertToArray(P);
+          //Serial1.print(" mb, ");
+          //Serial1.print(P*0.0295333727,2);
+          //Serial1.println(" inHg");
 
           // The pressure sensor returns abolute pressure, which varies with altitude.
           // To remove the effects of altitude, use the sealevel function and your current altitude.
@@ -277,11 +348,11 @@ void barometricLoop() {
           // Result: p0 = sea-level compensated pressure in mb
 
           //p0 = pressure.sealevel(P,ALTITUDE); // we're at 1655 meters (Boulder, CO)
-          //Serial.print("relative (sea-level) pressure: ");
-          //Serial.print(p0,2);
-          //Serial.print(" mb, ");
-          //Serial.print(p0*0.0295333727,2);
-          //Serial.println(" inHg");
+          //Serial1.print("relative (sea-level) pressure: ");
+          //Serial1.print(p0,2);
+          //Serial1.print(" mb, ");
+          //Serial1.print(p0*0.0295333727,2);
+          //Serial1.println(" inHg");
 
           // On the other hand, if you want to determine your altitude from the pressure reading,
           // use the altitude function along with a baseline pressure (sea-level or other).
@@ -289,19 +360,19 @@ void barometricLoop() {
           // Result: a = altitude in m.
 
           //a = pressure.altitude(P,p0);
-          //Serial.print("computed altitude: ");
-          //Serial.print(a,0);
-          //Serial.print(" meters, ");
-          //Serial.print(a*3.28084,0);
-          //Serial.println(" feet");
+          //Serial1.print("computed altitude: ");
+          //Serial1.print(a,0);
+          //Serial1.print(" meters, ");
+          //Serial1.print(a*3.28084,0);
+          //Serial1.println(" feet");
         }
-        else Serial.println("error retrieving pressure measurement\n");
+        else Serial1.println("error retrieving pressure measurement\n");
       }
-      else Serial.println("error starting pressure measurement\n");
+      else Serial1.println("error starting pressure measurement\n");
     }
-    else Serial.println("error retrieving temperature measurement\n");
+    else Serial1.println("error retrieving temperature measurement\n");
   }
-  else Serial.println("error starting temperature measurement\n");
+  else Serial1.println("error starting temperature measurement\n");
 
   delay(globalDelay);  // Pause for 5 seconds.
 }
@@ -315,11 +386,11 @@ void gyroSetup() {
         Fastwire::setup(400, true);
     #endif
 
-    // initialize serial communication
+    // initialize Serial1 communication
     // (115200 chosen because it is required for Teapot Demo output, but it's
     // really up to you depending on your project)
-    //Serial.begin(9600);
-    while (!Serial); // wait for Leonardo enumeration, others continue immediately
+    //Serial1.begin(9600);
+    while (!Serial1); // wait for Leonardo enumeration, others continue immediately
 
     // NOTE: 8MHz or slower host processors, like the Teensy @ 3.3v or Ardunio
     // Pro Mini running at 3.3v, cannot handle this baud rate reliably due to
@@ -328,21 +399,21 @@ void gyroSetup() {
     // crystal solution for the UART timer.
 
     // initialize device
-    Serial.println(F("Initializing I2C devices..."));
+    Serial1.println(F("Initializing I2C devices..."));
     mpu.initialize();
 
     // verify connection
-    Serial.println(F("Testing device connections..."));
-    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+    Serial1.println(F("Testing device connections..."));
+    Serial1.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
 
     // wait for ready
-    //Serial.println(F("\nSend any character to begin DMP programming and demo: "));
-    //while (Serial.available() && Serial.read()); // empty buffer
-    //while (!Serial.available());                 // wait for data
-    //while (Serial.available() && Serial.read()); // empty buffer again
+    //Serial1.println(F("\nSend any character to begin DMP programming and demo: "));
+    //while (Serial1.available() && Serial1.read()); // empty buffer
+    //while (!Serial1.available());                 // wait for data
+    //while (Serial1.available() && Serial1.read()); // empty buffer again
 
     // load and configure the DMP
-    Serial.println(F("Initializing DMP..."));
+    Serial1.println(F("Initializing DMP..."));
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
@@ -354,16 +425,16 @@ void gyroSetup() {
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
         // turn on the DMP, now that it's ready
-        Serial.println(F("Enabling DMP..."));
+        Serial1.println(F("Enabling DMP..."));
         mpu.setDMPEnabled(true);
 
         // enable Arduino interrupt detection
-        Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+        Serial1.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
         attachInterrupt(0, dmpDataReady, RISING);
         mpuIntStatus = mpu.getIntStatus();
 
         // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        Serial1.println(F("DMP ready! Waiting for first interrupt..."));
         dmpReady = true;
 
         // get expected DMP packet size for later comparison
@@ -373,9 +444,9 @@ void gyroSetup() {
         // 1 = initial memory load failed
         // 2 = DMP configuration updates failed
         // (if it's going to break, usually the code will be 1)
-        Serial.print(F("DMP Initialization failed (code "));
-        Serial.print(devStatus);
-        Serial.println(F(")"));
+        Serial1.print(F("DMP Initialization failed (code "));
+        Serial1.print(devStatus);
+        Serial1.println(F(")"));
     }
 
     // configure LED for output
@@ -411,7 +482,7 @@ void gyroLoop() {
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
         // reset so we can continue cleanly
         mpu.resetFIFO();
-        Serial.println(F("FIFO overflow!"));
+        Serial1.println(F("FIFO overflow!"));
 
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & 0x02) {
@@ -428,26 +499,26 @@ void gyroLoop() {
         #ifdef OUTPUT_READABLE_QUATERNION
             // display quaternion values in easy matrix form: w x y z
             mpu.dmpGetQuaternion(&q, fifoBuffer);
-            Serial.print("quat\t");
-            Serial.print(q.w);
-            Serial.print("\t");
-            Serial.print(q.x);
-            Serial.print("\t");
-            Serial.print(q.y);
-            Serial.print("\t");
-            Serial.println(q.z);
+            Serial1.print("quat\t");
+            Serial1.print(q.w);
+            Serial1.print("\t");
+            Serial1.print(q.x);
+            Serial1.print("\t");
+            Serial1.print(q.y);
+            Serial1.print("\t");
+            Serial1.println(q.z);
         #endif
 
         #ifdef OUTPUT_READABLE_EULER
             // display Euler angles in degrees
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetEuler(euler, &q);
-            Serial.print("euler\t");
-            Serial.print(euler[0] * 180/M_PI);
-            Serial.print("\t");
-            Serial.print(euler[1] * 180/M_PI);
-            Serial.print("\t");
-            Serial.println(euler[2] * 180/M_PI);
+            Serial1.print("euler\t");
+            Serial1.print(euler[0] * 180/M_PI);
+            Serial1.print("\t");
+            Serial1.print(euler[1] * 180/M_PI);
+            Serial1.print("\t");
+            Serial1.println(euler[2] * 180/M_PI);
         #endif
 
         #ifdef OUTPUT_READABLE_YAWPITCHROLL
@@ -455,13 +526,17 @@ void gyroLoop() {
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            //Serial.print("ypr\t");
-            Serial.print(ypr[0] * 180/M_PI);
-            Serial.print("\t");
-            Serial.print(ypr[1] * 180/M_PI);
-            Serial.print("\t");
-            Serial.print(ypr[2] * 180/M_PI);
-            Serial.print("\t");
+            //Serial1.print("ypr\t");
+            Serial1.print(ypr[0] * 180/M_PI);
+            Serial1.print("\t");
+            Serial1.print(ypr[1] * 180/M_PI);
+            Serial1.print("\t");
+            Serial1.print(ypr[2] * 180/M_PI);
+            Serial1.print("\t");
+            convertToArray((double)(ypr[0]*180/M_PI));
+            convertToArray((double)(ypr[1]*180/M_PI));
+            convertToArray((double)(ypr[2]*180/M_PI));
+
         #endif
 
         #ifdef OUTPUT_READABLE_REALACCEL
@@ -470,12 +545,12 @@ void gyroLoop() {
             mpu.dmpGetAccel(&aa, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            Serial.print("areal\t");
-            Serial.print(aaReal.x);
-            Serial.print("\t");
-            Serial.print(aaReal.y);
-            Serial.print("\t");
-            Serial.println(aaReal.z);
+            Serial1.print("areal\t");
+            Serial1.print(aaReal.x);
+            Serial1.print("\t");
+            Serial1.print(aaReal.y);
+            Serial1.print("\t");
+            Serial1.println(aaReal.z);
         #endif
 
         #ifdef OUTPUT_READABLE_WORLDACCEL
@@ -486,12 +561,12 @@ void gyroLoop() {
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
             mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-            Serial.print("aworld\t");
-            Serial.print(aaWorld.x);
-            Serial.print("\t");
-            Serial.print(aaWorld.y);
-            Serial.print("\t");
-            Serial.println(aaWorld.z);
+            Serial1.print("aworld\t");
+            Serial1.print(aaWorld.x);
+            Serial1.print("\t");
+            Serial1.print(aaWorld.y);
+            Serial1.print("\t");
+            Serial1.println(aaWorld.z);
         #endif
     
         #ifdef OUTPUT_TEAPOT
@@ -504,7 +579,7 @@ void gyroLoop() {
             teapotPacket[7] = fifoBuffer[9];
             teapotPacket[8] = fifoBuffer[12];
             teapotPacket[9] = fifoBuffer[13];
-            Serial.write(teapotPacket, 14);
+            Serial1.write(teapotPacket, 14);
             teapotPacket[11]++; // packetCount, loops at 0xFF on purpose
         #endif
 
