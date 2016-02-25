@@ -12,8 +12,8 @@
 
 #define SS 53 // Serial1 Select -> CS on LIS331
 #define MOSI 51 // MasterOutSlaveIn -> SDI
-#define MISO 50 // MasterInSlaveOut -> SDO
-#define SCK 52 // Serial1 Clock -> SPC on LIS331
+#define MISO 47 // MasterInSlaveOut -> SDO
+#define SCK 49 // Serial1 Clock -> SPC on LIS331
 #define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
 #define ALTITUDE 634.0
 #define OUTPUT_READABLE_YAWPITCHROLL
@@ -22,7 +22,7 @@
 double xAcc, yAcc, zAcc; // global acceleration values
 SFE_BMP180 pressure;
 int ledPin =  13; //Status LED connected to digital pin 13 - for openLogger
-int nasaTimerPin = 30;
+int nasaTimerPin = 31;
 MPU6050 mpu(0x68); // <-- use for AD0 high
 bool blinkState = false;
 bool dmpReady = false;  // set true if DMP init was successful
