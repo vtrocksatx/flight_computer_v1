@@ -5,6 +5,7 @@
  * Author: RockSat-X at Virginia Tech
  */
 
+// Library inclusions
 #include <SPI.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,16 +20,19 @@
 #define MOSI 51 // MasterOutSlaveIn -> SDI
 #define MISO 47 // MasterInSlaveOut -> SDO
 #define SCK 49 // Serial1 Clock -> SPC on LIS331
-#define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
-#define OUTPUT_READABLE_YAWPITCHROLL
 #define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
 #define NASA_TIMER_EVENT_INPUT 31
+
+// Constant definitions
+#define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
+#define OUTPUT_READABLE_YAWPITCHROLL
+#define TRANSMIT_BEGIN_TIME 100000
 
 // Object declarations
 SFE_BMP180 pressure;
 MPU6050 mpu(0x68); // <-- use for AD0 high
-Quaternion q;  // [w, x, y, z]         quaternion container
-VectorFloat gravity;    // [x, y, z]            gravity vector
+Quaternion q; // [w, x, y, z]         quaternion container
+VectorFloat gravity; // [x, y, z]            gravity vector
 
 // Global variables
 double xAcc, yAcc, zAcc;
@@ -47,8 +51,8 @@ long currentTime = 0;
 bool launched = false;
 bool valRead = false;
 bool getTime = true;
-char ettusArray[256];
-int ettusTransCount = 0;
+char dataPacket[256];
+int transmittedPacketCount = 0;
 char buffer[256];
 
 /**
@@ -79,21 +83,22 @@ void loop() {
     Serial1.println("Launch Timer Event State Change: HIGH");
   }
   
-  // TODO: Improve this so data isnt passed to E310 until certain time is reached
-  if (launched) {
-    currentTime = millis() - initTime;
-    Serial1.print(currentTime / 1000);
-    Serial1.print(".");
-    Serial1.print(currentTime % 1000);
-    Serial1.print("\t\t");
-    ettusLoopHelper();
-    barometricLoop();
-    gyroLoop();
-    accelerometerLoop();
-    Serial.print(ettusArray);
+  currentTime = millis() - initTime;
+  Serial1.print(currentTime / 1000);
+  Serial1.print(".");
+  Serial1.print(currentTime % 1000);
+  Serial1.print("\t\t");
+  initTransmitPacket();
+  barometricLoop();
+  gyroLoop();
+  accelerometerLoop();
+  Serial1.println();
+  
+  // Begin passing data to E310 once antenna is deployed and E310 is booted
+  if (launched && currentTime >= TRANSMIT_BEGIN_TIME) {
+    Serial.print(dataPacket);
     Serial.println();
-    Serial1.println();
-    ettusTransCount++;
+    transmittedPacketCount++;
   }
 }
 
@@ -108,52 +113,52 @@ void loop() {
  ********************************************************/
 
 void clearArray() {
-  memset(ettusArray, '\0', sizeof ettusArray);
+  memset(dataPacket, '\0', sizeof dataPacket);
 }
 
 // TODO: Improve efficiency of this function
 void convertToArray(double val) {
   if (val < 0) {
-    strcat(ettusArray, "-");
+    strcat(dataPacket, "-");
   }
   val = abs(val);
 
   itoa(val, buffer, 10);
-  strncat(ettusArray, buffer, countCharsLeft());
+  strncat(dataPacket, buffer, countCharsLeft());
   memset(buffer, '\0', sizeof buffer);
-  strncat(ettusArray, ".", countCharsLeft());
+  strncat(dataPacket, ".", countCharsLeft());
   itoa(((int)(val * 10)) % 10, buffer, 10);
-  strncat(ettusArray, buffer, countCharsLeft());
+  strncat(dataPacket, buffer, countCharsLeft());
   memset(buffer, '\0', sizeof buffer);
   itoa(((int)(val * 100)) % 10, buffer, 10);
-  strncat(ettusArray, buffer, countCharsLeft());
+  strncat(dataPacket, buffer, countCharsLeft());
   memset(buffer, '\0', sizeof buffer);
-  strncat(ettusArray, ",", countCharsLeft());
+  strncat(dataPacket, ",", countCharsLeft());
 }
 
 int countCharsLeft() {
   int i = 0;
-  while (ettusArray[i] != '\0') {
+  while (dataPacket[i] != '\0') {
     i++;
   }
   return (255 - i);
 }
 
-void ettusLoopHelper() {
+void initTransmitPacket() {
   clearArray();
-  strcat(ettusArray, "$,callsign,");
-  itoa(ettusTransCount, buffer, 10);
-  strcat(ettusArray, buffer);
+  strcat(dataPacket, "$,callsign,");
+  itoa(transmittedPacketCount, buffer, 10);
+  strcat(dataPacket, buffer);
   memset(buffer, '\0', sizeof buffer);
-  strcat(ettusArray, ",");
+  strcat(dataPacket, ",");
   itoa(currentTime / 1000, buffer, 10);
-  strcat(ettusArray, buffer);
+  strcat(dataPacket, buffer);
   memset(buffer, '\0', sizeof buffer);
-  strcat(ettusArray, ".");
+  strcat(dataPacket, ".");
   itoa(currentTime % 1000, buffer, 10);
-  strcat(ettusArray, buffer);
+  strcat(dataPacket, buffer);
   memset(buffer, '\0', sizeof buffer);
-  strcat(ettusArray, ",");
+  strcat(dataPacket, ",");
 }
 
 /********************************************************
@@ -244,19 +249,19 @@ void accelerometerLoop() {
   convertToArray(xAcc);
   convertToArray(yAcc);
   if (zAcc < 0) {
-    strcat(ettusArray, "-");
+    strcat(dataPacket, "-");
   }
   zAcc = abs(zAcc);
 
   itoa(zAcc, buffer, 10);
-  strncat(ettusArray, buffer, countCharsLeft());
+  strncat(dataPacket, buffer, countCharsLeft());
   memset(buffer, '\0', sizeof buffer);
-  strncat(ettusArray, ".", countCharsLeft());
+  strncat(dataPacket, ".", countCharsLeft());
   itoa(((int)(zAcc * 10)) % 10, buffer, 10);
-  strncat(ettusArray, buffer, countCharsLeft());
+  strncat(dataPacket, buffer, countCharsLeft());
   memset(buffer, '\0', sizeof buffer);
   itoa(((int)(zAcc * 100)) % 10, buffer, 10);
-  strncat(ettusArray, buffer, countCharsLeft());
+  strncat(dataPacket, buffer, countCharsLeft());
   memset(buffer, '\0', sizeof buffer);
   delay(1);
 }
