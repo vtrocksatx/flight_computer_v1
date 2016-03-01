@@ -15,13 +15,11 @@
 #define MISO 47 // MasterInSlaveOut -> SDO
 #define SCK 49 // Serial1 Clock -> SPC on LIS331
 #define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
-#define ALTITUDE 634.0
 #define OUTPUT_READABLE_YAWPITCHROLL
 #define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
 
 double xAcc, yAcc, zAcc; // global acceleration values
 SFE_BMP180 pressure;
-int ledPin =  13; //Status LED connected to digital pin 13 - for openLogger
 int nasaTimerPin = 31;
 MPU6050 mpu(0x68); // <-- use for AD0 high
 bool blinkState = false;
@@ -132,7 +130,7 @@ void ettusLoopHelper() {
 }
 
 void openLoggerSetup() {
-  pinMode(ledPin, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
   delay(1000); //Wait a second for OpenLog to init
   Serial1.println();
 }
