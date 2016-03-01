@@ -18,15 +18,16 @@
 // Pin definitions
 #define SS 53 // Serial1 Select -> CS on LIS331
 #define MOSI 51 // MasterOutSlaveIn -> SDI
-#define MISO 47 // MasterInSlaveOut -> SDO
-#define SCK 49 // Serial1 Clock -> SPC on LIS331
+#define MISO 50 // MasterInSlaveOut -> SDO
+#define SCK 52 // Serial1 Clock -> SPC on LIS331
 #define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
 #define NASA_TIMER_EVENT_INPUT 31
 
 // Constant definitions
 #define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
 #define OUTPUT_READABLE_YAWPITCHROLL
-#define TRANSMIT_BEGIN_TIME 100000
+#define TRANSMIT_BEGIN_TIME 100
+#define MAX_PACKET_SIZE 255
 
 // Object declarations
 SFE_BMP180 pressure;
@@ -51,9 +52,8 @@ long currentTime = 0;
 bool launched = false;
 bool valRead = false;
 bool getTime = true;
-char dataPacket[256];
 int transmittedPacketCount = 0;
-char buffer[256];
+String dataPacketToTransmit;
 
 /**
  * This fuction is run once at the beginning of the microcontroller's initialization sequence.
@@ -96,14 +96,19 @@ void loop() {
   
   // Begin passing data to E310 once antenna is deployed and E310 is booted
   if (launched && currentTime >= TRANSMIT_BEGIN_TIME) {
-    Serial.print(dataPacket);
+    
+    if (dataPacketToTransmit.length() > MAX_PACKET_SIZE) {
+      dataPacketToTransmit = dataPacketToTransmit.substring(0, MAX_PACKET_SIZE);
+    }
+    
+    Serial.print(dataPacketToTransmit);
     Serial.println();
     transmittedPacketCount++;
   }
 }
 
 /********************************************************
- * Command specific functions                           *
+ * Command and control specific functions               *
  ********************************************************/
  
  
@@ -112,53 +117,12 @@ void loop() {
  * USRP E310 communication specific functions           *
  ********************************************************/
 
-void clearArray() {
-  memset(dataPacket, '\0', sizeof dataPacket);
-}
-
-// TODO: Improve efficiency of this function
-void convertToArray(double val) {
-  if (val < 0) {
-    strcat(dataPacket, "-");
-  }
-  val = abs(val);
-
-  itoa(val, buffer, 10);
-  strncat(dataPacket, buffer, countCharsLeft());
-  memset(buffer, '\0', sizeof buffer);
-  strncat(dataPacket, ".", countCharsLeft());
-  itoa(((int)(val * 10)) % 10, buffer, 10);
-  strncat(dataPacket, buffer, countCharsLeft());
-  memset(buffer, '\0', sizeof buffer);
-  itoa(((int)(val * 100)) % 10, buffer, 10);
-  strncat(dataPacket, buffer, countCharsLeft());
-  memset(buffer, '\0', sizeof buffer);
-  strncat(dataPacket, ",", countCharsLeft());
-}
-
-int countCharsLeft() {
-  int i = 0;
-  while (dataPacket[i] != '\0') {
-    i++;
-  }
-  return (255 - i);
-}
-
 void initTransmitPacket() {
-  clearArray();
-  strcat(dataPacket, "$,callsign,");
-  itoa(transmittedPacketCount, buffer, 10);
-  strcat(dataPacket, buffer);
-  memset(buffer, '\0', sizeof buffer);
-  strcat(dataPacket, ",");
-  itoa(currentTime / 1000, buffer, 10);
-  strcat(dataPacket, buffer);
-  memset(buffer, '\0', sizeof buffer);
-  strcat(dataPacket, ".");
-  itoa(currentTime % 1000, buffer, 10);
-  strcat(dataPacket, buffer);
-  memset(buffer, '\0', sizeof buffer);
-  strcat(dataPacket, ",");
+  dataPacketToTransmit = String("$,callsign,");
+  dataPacketToTransmit += transmittedPacketCount;
+  dataPacketToTransmit +=",";
+  dataPacketToTransmit += currentTime / 1000.0;
+  dataPacketToTransmit +=",";
 }
 
 /********************************************************
@@ -246,23 +210,13 @@ void accelerometerLoop() {
   Serial1.print("\t");
   Serial1.print(zAcc, 2);
   Serial1.print("\t");
-  convertToArray(xAcc);
-  convertToArray(yAcc);
-  if (zAcc < 0) {
-    strcat(dataPacket, "-");
-  }
-  zAcc = abs(zAcc);
+  
+  dataPacketToTransmit += xAcc;
+  dataPacketToTransmit += ",";
+  dataPacketToTransmit += yAcc;
+  dataPacketToTransmit += ",";
+  dataPacketToTransmit += zAcc;
 
-  itoa(zAcc, buffer, 10);
-  strncat(dataPacket, buffer, countCharsLeft());
-  memset(buffer, '\0', sizeof buffer);
-  strncat(dataPacket, ".", countCharsLeft());
-  itoa(((int)(zAcc * 10)) % 10, buffer, 10);
-  strncat(dataPacket, buffer, countCharsLeft());
-  memset(buffer, '\0', sizeof buffer);
-  itoa(((int)(zAcc * 100)) % 10, buffer, 10);
-  strncat(dataPacket, buffer, countCharsLeft());
-  memset(buffer, '\0', sizeof buffer);
   delay(1);
 }
 
@@ -291,7 +245,8 @@ void barometricLoop() {
     if (status != 0) {
       Serial1.print(T, 2);
       Serial1.print("\t\t");
-      convertToArray(T);
+      dataPacketToTransmit += T;
+      dataPacketToTransmit += ",";
       status = pressure.startPressure(3);
       if (status != 0) {
         delay(status);
@@ -299,7 +254,8 @@ void barometricLoop() {
         if (status != 0) {
           Serial1.print(P, 2);
           Serial1.print("\t\t");
-          convertToArray(P);
+          dataPacketToTransmit += P;
+          dataPacketToTransmit += ",";
         }
         else {
           Serial1.println("error retrieving pressure measurement\n");
@@ -395,16 +351,20 @@ void gyroLoop() {
     mpu.dmpGetQuaternion(&q, fifoBuffer);
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-    //Serial1.print("ypr\t");
+
     Serial1.print(ypr[0] * 180 / M_PI);
     Serial1.print("\t");
     Serial1.print(ypr[1] * 180 / M_PI);
     Serial1.print("\t");
     Serial1.print(ypr[2] * 180 / M_PI);
     Serial1.print("\t");
-    convertToArray((double)(ypr[0] * 180 / M_PI));
-    convertToArray((double)(ypr[1] * 180 / M_PI));
-    convertToArray((double)(ypr[2] * 180 / M_PI));
+
+    dataPacketToTransmit += (double)(ypr[0] * 180 / M_PI);
+    dataPacketToTransmit += ",";
+    dataPacketToTransmit += (double)(ypr[1] * 180 / M_PI);
+    dataPacketToTransmit += ",";
+    dataPacketToTransmit += (double)(ypr[2] * 180 / M_PI);
+    dataPacketToTransmit += ",";
 
     #endif
 
