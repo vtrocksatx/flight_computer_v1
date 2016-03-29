@@ -1,7 +1,7 @@
 /**
  * RockSat-X 2016 Flight Computer code.
  *
- * Version: 03/01/2016
+ * Version: 03/29/2016
  * Author: RockSat-X at Virginia Tech
  */
 
@@ -201,9 +201,16 @@ void readVal() {
   zAcc = zVal * SCALE;
 }
 
+void invertAccVals() {
+  xAcc *= -1;
+  yAcc *= -1;
+  zAcc *= -1;
+}
+
 void accelerometerLoop() {
   readVal(); // get acc values and put into global variables
-
+  invertAccVals(); //invert values of accelerometer data because component is mounted upside down
+  
   Serial1.print(xAcc, 2);
   Serial1.print("\t");
   Serial1.print(yAcc, 2);
@@ -343,6 +350,7 @@ void gyroLoop() {
   else if (mpuIntStatus & 0x02) {
     while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
     mpu.getFIFOBytes(fifoBuffer, packetSize);
+    mpu.resetFIFO();
     fifoCount -= packetSize;
 
     #ifdef OUTPUT_READABLE_YAWPITCHROLL
