@@ -1,7 +1,7 @@
 /**
  * RockSat-X 2016 Flight Computer code.
  *
- * Version: 03/29/2016
+ * Version: 04/04/2016
  * Author: RockSat-X at Virginia Tech
  */
 
@@ -27,7 +27,7 @@
 #define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
 #define OUTPUT_READABLE_YAWPITCHROLL
 #define TRANSMIT_BEGIN_TIME 100
-#define MAX_PACKET_SIZE 255
+#define MAX_PACKET_SIZE 256
 
 // Object declarations
 SFE_BMP180 pressure;
@@ -96,13 +96,18 @@ void loop() {
   
   // Begin passing data to E310 once antenna is deployed and E310 is booted
   if (launched && currentTime >= TRANSMIT_BEGIN_TIME) {
-    
-    if (dataPacketToTransmit.length() > MAX_PACKET_SIZE) {
-      dataPacketToTransmit = dataPacketToTransmit.substring(0, MAX_PACKET_SIZE);
+
+      dataPacketToTransmit += ",$";
+
+    // Pad Tx string to 256 bytes if necessary
+    for (int i = dataPacketToTransmit.length(); i < MAX_PACKET_SIZE; i++) {
+      dataPacketToTransmit += "0";
     }
+
+    dataPacketToTransmit = dataPacketToTransmit.substring(0, MAX_PACKET_SIZE - 2);
+    dataPacketToTransmit += "\r\n";
     
     Serial.print(dataPacketToTransmit);
-    Serial.println();
     transmittedPacketCount++;
   }
 }
@@ -118,7 +123,7 @@ void loop() {
  ********************************************************/
 
 void initTransmitPacket() {
-  dataPacketToTransmit = String("$,callsign,");
+  dataPacketToTransmit = String("$,KM4SRC,");
   dataPacketToTransmit += transmittedPacketCount;
   dataPacketToTransmit +=",";
   dataPacketToTransmit += currentTime / 1000.0;
