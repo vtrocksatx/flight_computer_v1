@@ -26,7 +26,7 @@
 // Constant definitions
 #define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
 #define OUTPUT_READABLE_YAWPITCHROLL
-#define TRANSMIT_BEGIN_TIME 100
+#define TRANSMIT_BEGIN_TIME 120000
 #define MAX_PACKET_SIZE 256
 
 // Object declarations
@@ -61,7 +61,7 @@ String dataPacketToTransmit;
  */
 void setup() {
   Serial1.begin(19200); // OpenLog and RS-232 Serial output
-  Serial.begin(9600); // E310 Serial output
+  Serial.begin(115200); // E310 Serial output
   pinMode(NASA_TIMER_EVENT_INPUT, INPUT);
   gyroSetup();
   openLoggerSetup();
@@ -110,6 +110,7 @@ void loop() {
     Serial.print(dataPacketToTransmit);
     transmittedPacketCount++;
   }
+  delay(250);
 }
 
 /********************************************************
