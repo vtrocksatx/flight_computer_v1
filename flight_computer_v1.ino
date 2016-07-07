@@ -26,7 +26,7 @@
 // Constant definitions
 #define SCALE 0.0007324; // approximate scale factor for full range (+/-24g)
 #define OUTPUT_READABLE_YAWPITCHROLL
-#define TRANSMIT_BEGIN_TIME 120000
+#define TRANSMIT_BEGIN_TIME 116000
 #define MAX_PACKET_SIZE 256
 
 // Object declarations
@@ -54,6 +54,7 @@ bool valRead = false;
 bool getTime = true;
 int transmittedPacketCount = 0;
 String dataPacketToTransmit;
+String completePacketToTransmit;
 
 /**
  * This fuction is run once at the beginning of the microcontroller's initialization sequence.
@@ -88,29 +89,41 @@ void loop() {
   Serial1.print(".");
   Serial1.print(currentTime % 1000);
   Serial1.print("\t\t");
-  initTransmitPacket();
-  barometricLoop();
-  gyroLoop();
-  accelerometerLoop();
+  initTransmitPacket(true);
+  barometricLoop(true);
+  gyroLoop(true);
+  accelerometerLoop(true);
   Serial1.println();
   
   // Begin passing data to E310 once antenna is deployed and E310 is booted
   if (launched && currentTime >= TRANSMIT_BEGIN_TIME) {
 
-      dataPacketToTransmit += ",$";
+    dataPacketToTransmit += ",";
+
+    completePacketToTransmit = String(dataPacketToTransmit);
+
+    currentTime = millis() - initTime;
+    initTransmitPacket(false);
+    barometricLoop(false);
+    gyroLoop(false);
+    accelerometerLoop(false);
+
+    completePacketToTransmit += dataPacketToTransmit;
+
+    completePacketToTransmit += ",$";
 
     // Pad Tx string to 256 bytes if necessary
-    for (int i = dataPacketToTransmit.length(); i < MAX_PACKET_SIZE; i++) {
-      dataPacketToTransmit += "0";
+    for (int i = completePacketToTransmit.length(); i < MAX_PACKET_SIZE; i++) {
+      completePacketToTransmit += "0";
     }
 
-    dataPacketToTransmit = dataPacketToTransmit.substring(0, MAX_PACKET_SIZE - 2);
-    dataPacketToTransmit += "\r\n";
+    completePacketToTransmit = completePacketToTransmit.substring(0, MAX_PACKET_SIZE - 2);
+    completePacketToTransmit += "\r\n";
     
-    Serial.print(dataPacketToTransmit);
+    Serial.print(completePacketToTransmit);
     transmittedPacketCount++;
   }
-  delay(250);
+  delay(150);
 }
 
 /********************************************************
@@ -123,9 +136,14 @@ void loop() {
  * USRP E310 communication specific functions           *
  ********************************************************/
 
-void initTransmitPacket() {
-  dataPacketToTransmit = String("$,KM4SRC,");
-  dataPacketToTransmit += transmittedPacketCount;
+void initTransmitPacket(bool newPacket) {
+  if (newPacket) {
+    dataPacketToTransmit = String("$,KM4SRC,");
+    dataPacketToTransmit += transmittedPacketCount;
+  }
+  else {
+    dataPacketToTransmit = String("#");
+  }
   dataPacketToTransmit +=",";
   dataPacketToTransmit += currentTime / 1000.0;
   dataPacketToTransmit +=",";
@@ -213,16 +231,18 @@ void invertAccVals() {
   zAcc *= -1;
 }
 
-void accelerometerLoop() {
+void accelerometerLoop(bool serialPrint) {
   readVal(); // get acc values and put into global variables
   invertAccVals(); //invert values of accelerometer data because component is mounted upside down
-  
-  Serial1.print(xAcc, 2);
-  Serial1.print("\t");
-  Serial1.print(yAcc, 2);
-  Serial1.print("\t");
-  Serial1.print(zAcc, 2);
-  Serial1.print("\t");
+
+  if (serialPrint) {
+    Serial1.print(xAcc, 2);
+    Serial1.print("\t");
+    Serial1.print(yAcc, 2);
+    Serial1.print("\t");
+    Serial1.print(zAcc, 2);
+    Serial1.print("\t");
+  }
   
   dataPacketToTransmit += xAcc;
   dataPacketToTransmit += ",";
@@ -247,7 +267,7 @@ void barometricSetup() {
   }
 }
 
-void barometricLoop() {
+void barometricLoop(bool serialPrint) {
   char status;
   double T, P, p0, a;
 
@@ -256,8 +276,10 @@ void barometricLoop() {
     delay(status);
     status = pressure.getTemperature(T);
     if (status != 0) {
-      Serial1.print(T, 2);
-      Serial1.print("\t\t");
+      if (serialPrint) {
+        Serial1.print(T, 2);
+        Serial1.print("\t\t");
+      }
       dataPacketToTransmit += T;
       dataPacketToTransmit += ",";
       status = pressure.startPressure(3);
@@ -265,8 +287,10 @@ void barometricLoop() {
         delay(status);
         status = pressure.getPressure(P, T);
         if (status != 0) {
-          Serial1.print(P, 2);
-          Serial1.print("\t\t");
+          if (serialPrint) {
+            Serial1.print(P, 2);
+            Serial1.print("\t\t");
+          }
           dataPacketToTransmit += P;
           dataPacketToTransmit += ",";
         }
@@ -339,7 +363,7 @@ void gyroSetup() {
   pinMode(LED_PIN, OUTPUT);
 }
 
-void gyroLoop() {
+void gyroLoop(bool serialPrint) {
   if (!dmpReady) {
     return;
   }
@@ -351,7 +375,9 @@ void gyroLoop() {
   fifoCount = mpu.getFIFOCount();
   if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
     mpu.resetFIFO();
-    Serial1.println(F("FIFO overflow!"));
+    if (serialPrint) {
+      Serial1.println(F("FIFO overflow!"));
+    }
   }
   else if (mpuIntStatus & 0x02) {
     while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
@@ -366,12 +392,14 @@ void gyroLoop() {
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-    Serial1.print(ypr[0] * 180 / M_PI);
-    Serial1.print("\t");
-    Serial1.print(ypr[1] * 180 / M_PI);
-    Serial1.print("\t");
-    Serial1.print(ypr[2] * 180 / M_PI);
-    Serial1.print("\t");
+    if (serialPrint) {
+      Serial1.print(ypr[0] * 180 / M_PI);
+      Serial1.print("\t");
+      Serial1.print(ypr[1] * 180 / M_PI);
+      Serial1.print("\t");
+      Serial1.print(ypr[2] * 180 / M_PI);
+      Serial1.print("\t");
+    }
 
     dataPacketToTransmit += (double)(ypr[0] * 180 / M_PI);
     dataPacketToTransmit += ",";
